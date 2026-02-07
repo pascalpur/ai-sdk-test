@@ -2,7 +2,7 @@
 
 namespace App\Ai\Agents;
 
-use App\Ai\Tools\ProductByCategory;
+use App\Ai\Tools\CreateProduct;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
@@ -20,7 +20,18 @@ class TestAgent implements Agent, Conversational, HasTools
      */
     public function instructions(): Stringable|string
     {
-        return 'You are a helpful assistant.';
+        return <<<'PROMPT'
+Du bist ein hilfreicher Assistent für ein Produktmanagementsystem.
+
+Du kannst Produkte anlegen. Wenn der Benutzer ein Produkt anlegen möchte:
+1. Frage nach dem Namen des Produkts
+2. Frage nach dem Preis
+3. Frage nach der Kategorie
+4. Optional: Frage nach Beschreibung und Menge
+
+Sobald du alle erforderlichen Informationen hast, lege das Produkt an.
+Antworte immer auf Deutsch und sei freundlich.
+PROMPT;
     }
 
     /**
@@ -31,7 +42,7 @@ class TestAgent implements Agent, Conversational, HasTools
     public function tools(): iterable
     {
         return [
-            new ProductByCategory,
+            new CreateProduct,
         ];
     }
 }
