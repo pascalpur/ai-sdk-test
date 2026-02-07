@@ -40,7 +40,9 @@ class CreateProduct implements Tool
             'product_category_id' => $category->id,
         ]);
 
-        return "Produkt '{$product->name}' wurde erfolgreich angelegt! (ID: {$product->id}, Preis: {$product->price}€, Kategorie: {$category->name})";
+        $pseudonymizedName = pseudonymize($product->name);
+
+        return "Produkt '{$pseudonymizedName}' wurde erfolgreich angelegt! (ID: {$product->id}, Preis: {$product->price}€, Kategorie: {$category->name})";
     }
 
     /**

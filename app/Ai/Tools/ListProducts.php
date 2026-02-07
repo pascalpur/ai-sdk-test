@@ -3,20 +3,19 @@
 namespace App\Ai\Tools;
 
 use App\Models\Product;
-use App\Models\ProductCategory;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Stringable;
 
-class ProductByCategory implements Tool
+class ListProducts implements Tool
 {
     /**
      * Get the description of the tool's purpose.
      */
     public function description(): Stringable|string
     {
-        return 'This tool gets products filtered by category.';
+        return 'Returns the list of product with all meta data.';
     }
 
     /**
@@ -24,12 +23,7 @@ class ProductByCategory implements Tool
      */
     public function handle(Request $request): Stringable|string
     {
-        $category = ProductCategory::where('name', 'like', $request['category'])
-            ->first();
-
-
-        return Product::where('product_category_id', $category->id)->get();
-
+        return Product::select(['name', 'price', 'quantity', 'description'])->get();
     }
 
     /**
@@ -38,7 +32,7 @@ class ProductByCategory implements Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'category' => $schema->string()->nullable(),
+            'name' => $schema->string(),
         ];
     }
 }

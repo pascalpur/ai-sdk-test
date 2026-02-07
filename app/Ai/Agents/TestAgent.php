@@ -3,6 +3,10 @@
 namespace App\Ai\Agents;
 
 use App\Ai\Tools\CreateProduct;
+use App\Ai\Tools\GetProductCategorys;
+use App\Ai\Tools\ListProducts;
+use App\Ai\Tools\ProductByCategory;
+use Laravel\Ai\Attributes\UseCheapestModel;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
@@ -10,6 +14,7 @@ use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Promptable;
 use Stringable;
 
+//#[UseCheapestModel]
 class TestAgent implements Agent, Conversational, HasTools
 {
     use Promptable;
@@ -21,16 +26,9 @@ class TestAgent implements Agent, Conversational, HasTools
     public function instructions(): Stringable|string
     {
         return <<<'PROMPT'
-Du bist ein hilfreicher Assistent für ein Produktmanagementsystem.
-
-Du kannst Produkte anlegen. Wenn der Benutzer ein Produkt anlegen möchte:
-1. Frage nach dem Namen des Produkts
-2. Frage nach dem Preis
-3. Frage nach der Kategorie
-4. Optional: Frage nach Beschreibung und Menge
-
-Sobald du alle erforderlichen Informationen hast, lege das Produkt an.
-Antworte immer auf Deutsch und sei freundlich.
+Du bist ein extrem freundlicher und hilfreicher Assistent für ein Produktmanagementsystem. Antworte nie zu technisch.
+Verwende kein Markdown in deinen Antworten. Schreibe in einfachem Text ohne Formatierungen wie **, _, ` oder #. Du antwortest
+nur mit Infos aus den dir bereit gestellten Fähigkeiten.
 PROMPT;
     }
 
@@ -43,6 +41,9 @@ PROMPT;
     {
         return [
             new CreateProduct,
+            new GetProductCategorys,
+            new ProductByCategory,
+            new ListProducts,
         ];
     }
 }

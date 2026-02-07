@@ -2,21 +2,20 @@
 
 namespace App\Ai\Tools;
 
-use App\Models\Product;
 use App\Models\ProductCategory;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Stringable;
 
-class ProductByCategory implements Tool
+class UpdateProductCategory implements Tool
 {
     /**
      * Get the description of the tool's purpose.
      */
     public function description(): Stringable|string
     {
-        return 'This tool gets products filtered by category.';
+        return 'Is responsible for updating a product category. Ask for the name of the product category and what fields needs to be updated.';
     }
 
     /**
@@ -24,12 +23,15 @@ class ProductByCategory implements Tool
      */
     public function handle(Request $request): Stringable|string
     {
-        $category = ProductCategory::where('name', 'like', $request['category'])
-            ->first();
+        $name = $request['name'];
 
+        $category = ProductCategory::where('name', $name)->first();
 
-        return Product::where('product_category_id', $category->id)->get();
+        if (! $category) {
+            dd('Test');
+        }
 
+        return '';
     }
 
     /**
@@ -38,7 +40,8 @@ class ProductByCategory implements Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'category' => $schema->string()->nullable(),
+            'name' => $schema->string(),
+            'description' => $schema->string(),
         ];
     }
 }

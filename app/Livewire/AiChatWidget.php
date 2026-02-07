@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Ai\Agents\TestAgent;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -79,10 +80,14 @@ class AiChatWidget extends Component
                 session(['chat_conversation_id' => $this->conversationId]);
             }
 
+            Log::info(print_r($response, true));
+            // Parse response to replace pseudonyms with real values
+            $parsedResponse = resolve_pseudonyms((string) $response);
+
             // Add AI response to the list
             $this->messages[] = [
                 'role' => 'assistant',
-                'content' => (string) $response,
+                'content' => $parsedResponse,
             ];
         } catch (\Exception $e) {
             $this->messages[] = [
