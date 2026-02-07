@@ -97,6 +97,10 @@
 
     {{ $slot }}
 
+    @auth
+        @livewire('ai-chat-widget')
+    @endauth
+
     @fluxScripts
 </body>
 
