@@ -15,7 +15,7 @@ class ListProducts implements Tool
      */
     public function description(): Stringable|string
     {
-        return 'Returns the list of product with all meta data.';
+        return 'Returns a list of products depending on a given input.';
     }
 
     /**
@@ -23,7 +23,30 @@ class ListProducts implements Tool
      */
     public function handle(Request $request): Stringable|string
     {
-        return Product::select(['name', 'price', 'quantity', 'description'])->get();
+        $name = $request['name'];
+        $quantity = $request['quantity'];
+        $price = $request['price'];
+
+        return Product::query()
+            ->when($name, function ($query, $name) {
+
+                return $query->where('name', 'like', "%{$name}%");
+            })
+            ->when($quantity, function ($query, $quantity) {
+                return $query->where('quantity', $quantity);
+            })
+            ->when($price, function ($query, $price) {
+                return $query->where('price', $price);
+            })
+            ->get()
+            ->map(function (Product $product) {
+                return [
+                    'name' => $product->name,
+                    'description' => $product->description,
+                    'price' => $product->price,
+                    'quantity' => $product->quantity,
+                ];
+            });
     }
 
     /**
@@ -32,7 +55,9 @@ class ListProducts implements Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'name' => $schema->string(),
+            'name' => $schema->string()->nullable(),
+            'price' => $schema->number()->nullable(),
+            'quantity' => $schema->integer()->nullable(),
         ];
     }
 }
