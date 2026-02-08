@@ -15,7 +15,7 @@ class UpdateProductCategory implements Tool
      */
     public function description(): Stringable|string
     {
-        return 'Is responsible for updating a product category. Ask for the name of the product category and what fields needs to be updated.';
+        return 'Updates a product category.';
     }
 
     /**
@@ -23,15 +23,25 @@ class UpdateProductCategory implements Tool
      */
     public function handle(Request $request): Stringable|string
     {
+        $id = $request['id'];
         $name = $request['name'];
+        $description = $request['description'];
 
-        $category = ProductCategory::where('name', $name)->first();
+        $category = ProductCategory::find($id);
 
         if (! $category) {
-            dd('Test');
+            return 'Product category not found.';
         }
 
-        return '';
+        $category->name = $name;
+
+        if($description) {
+            $category->description = $description;
+        }
+
+        $category->save();
+
+        return 'Product category updated.';
     }
 
     /**
@@ -40,8 +50,9 @@ class UpdateProductCategory implements Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'name' => $schema->string(),
-            'description' => $schema->string(),
+            'id' => $schema->integer()->required(),
+            'name' => $schema->string()->required(),
+            'description' => $schema->string()->nullable(),
         ];
     }
 }

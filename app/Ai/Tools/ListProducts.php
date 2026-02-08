@@ -24,8 +24,6 @@ class ListProducts implements Tool
      */
     public function handle(Request $request): Stringable|string
     {
-        Log::info('Produkt');
-
         $id = $request['id'];
         $name = $request['name'];
         $quantity = $request['quantity'];

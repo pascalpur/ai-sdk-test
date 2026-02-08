@@ -3,10 +3,12 @@
 namespace App\Ai\Agents;
 
 use App\Ai\Tools\CreateProduct;
+use App\Ai\Tools\CreateProductCategory;
 use App\Ai\Tools\GetProductCategory;
 use App\Ai\Tools\GetProductCategorys;
 use App\Ai\Tools\ListProducts;
 use App\Ai\Tools\ProductByCategory;
+use App\Ai\Tools\UpdateProductCategory;
 use Laravel\Ai\Attributes\UseCheapestModel;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
@@ -41,10 +43,11 @@ PROMPT;
     public function tools(): iterable
     {
         return [
-            new CreateProduct,
-            new GetProductCategorys,
             new ListProducts,
             new GetProductCategory,
+            new CreateProductCategory,
+            new UpdateProductCategory,
+            new CreateProduct,
         ];
     }
 }

@@ -24,7 +24,6 @@ class GetProductCategory implements Tool
      */
     public function handle(Request $request): Stringable|string
     {
-        Log::info('Kategorie');
         $categoryId = $request['categoryId'];
         $categoryName = $request['categoryName'];
 
