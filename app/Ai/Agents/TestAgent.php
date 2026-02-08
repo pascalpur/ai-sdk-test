@@ -42,7 +42,6 @@ PROMPT;
         return [
             new CreateProduct,
             new GetProductCategorys,
-            new ProductByCategory,
             new ListProducts,
         ];
     }

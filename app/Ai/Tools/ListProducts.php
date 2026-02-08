@@ -3,6 +3,7 @@
 namespace App\Ai\Tools;
 
 use App\Models\Product;
+use App\Models\ProductCategory;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -15,7 +16,7 @@ class ListProducts implements Tool
      */
     public function description(): Stringable|string
     {
-        return 'Returns a list of products depending on given inputs and metrics.';
+        return 'Returns a list of products or a single product depending on given inputs and metrics.';
     }
 
     /**
@@ -23,13 +24,37 @@ class ListProducts implements Tool
      */
     public function handle(Request $request): Stringable|string
     {
+        $id = $request['id'];
         $name = $request['name'];
         $quantity = $request['quantity'];
         $price = $request['price'];
         $quantityOperator = $request['quantityOperator'];
         $priceOperator = $request['priceOperator'];
+        $categoryName = $request['categoryName'];
+        $categoryId = $request['categoryId'];
+
+        $category = null;
+
+
+        if ($categoryId) {
+            $category = ProductCategory::find($categoryId);
+
+            if (! $category) {
+                return "Category not found. Current Categories are: " . $this->getProductCategories();
+            }
+        }
+        if ($categoryName) {
+            $category = ProductCategory::where('name', $categoryName)->first();
+
+            if (! $category) {
+                return "Category not found. Current Categories are: " . $this->getProductCategories();
+            }
+        }
 
         return Product::query()
+            ->when($id, function ($query, $id) {
+                return $query->where('id', $id);
+            })
             ->when($name, function ($query, $name) {
                 $query->where('name', 'like', "%{$name}%");
             })
@@ -46,6 +71,9 @@ class ListProducts implements Tool
                     $priceOperator ?? '=',
                     $price
                 );
+            })
+            ->when($category !== null, function ($query) use ($category) {
+                return $query->where('product_category_id', $category->id);
             })
             ->get()
             ->map(function (Product $product) {
@@ -65,11 +93,27 @@ class ListProducts implements Tool
     public function schema(JsonSchema $schema): array
     {
         return [
+            'id' => $schema->integer()->nullable(),
             'name' => $schema->string()->nullable(),
             'price' => $schema->number()->nullable(),
             'quantity' => $schema->integer()->nullable(),
             'quantityOperator' => $schema->string()->enum(['>', '<', '>=', '<='])->nullable(),
             'priceOperator' => $schema->string()->enum(['>', '<', '>=', '<='])->nullable(),
+            'categoryName' => $schema->string()->nullable(),
+            'categoryId' => $schema->integer()->nullable(),
         ];
+    }
+
+    private function getProductCategories(): string
+    {
+        return ProductCategory::query()
+            ->get()
+            ->map(function (ProductCategory $category) {
+                return [
+                    'id' => $category->id,
+                    'name' => $category->name,
+                ];
+            })
+            ->toJson();
     }
 }
