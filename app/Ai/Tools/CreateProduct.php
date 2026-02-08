@@ -16,7 +16,7 @@ class CreateProduct implements Tool
      */
     public function description(): Stringable|string
     {
-        return 'Legt ein neues Produkt in der Datenbank an. Frage den Benutzer nach allen erforderlichen Werten bevor du dieses Tool aufrufst.';
+        return 'Creates a new product.';
     }
 
     /**
@@ -24,25 +24,27 @@ class CreateProduct implements Tool
      */
     public function handle(Request $request): Stringable|string
     {
-        $category = ProductCategory::where('name', 'like', '%'.$request['category'].'%')->first();
+        $name = $request['name'];
+        $description = $request['description'];
+        $price = $request['price'];
+        $quantity = $request['quantity'];
+        $categoryId = $request['categoryId'];
+
+        $category = ProductCategory::find($categoryId);
 
         if (! $category) {
-            $availableCategories = ProductCategory::pluck('name')->implode(', ');
-
-            return "Die Kategorie '{$request['category']}' wurde nicht gefunden. Verfügbare Kategorien: {$availableCategories}";
+            return 'Category not found.';
         }
 
         $product = Product::create([
-            'name' => $request['name'],
-            'description' => $request['description'] ?? null,
-            'price' => $request['price'],
-            'quantity' => $request['quantity'] ?? 0,
+            'name' => $name,
+            'description' => $description ?? null,
+            'price' => $price,
+            'quantity' => $quantity ?? 0,
             'product_category_id' => $category->id,
         ]);
 
-        $pseudonymizedName = pseudonymize($product->name);
-
-        return "Produkt '{$pseudonymizedName}' wurde erfolgreich angelegt! (ID: {$product->id}, Preis: {$product->price}€, Kategorie: {$category->name})";
+        return 'Product was created. '.$product->toJson();
     }
 
     /**
@@ -55,7 +57,7 @@ class CreateProduct implements Tool
             'description' => $schema->string()->nullable(),
             'price' => $schema->number(),
             'quantity' => $schema->integer()->nullable(),
-            'category' => $schema->string(),
+            'categoryId' => $schema->integer(),
         ];
     }
 }

@@ -35,7 +35,7 @@ class UpdateProductCategory implements Tool
 
         $category->name = $name;
 
-        if($description) {
+        if ($description) {
             $category->description = $description;
         }
 
