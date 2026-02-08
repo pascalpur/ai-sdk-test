@@ -80,7 +80,6 @@ class AiChatWidget extends Component
                 session(['chat_conversation_id' => $this->conversationId]);
             }
 
-            Log::info(print_r($response, true));
             // Parse response to replace pseudonyms with real values
             $parsedResponse = resolve_pseudonyms((string) $response);
 
