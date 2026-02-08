@@ -15,7 +15,7 @@ class ListProducts implements Tool
      */
     public function description(): Stringable|string
     {
-        return 'Returns a list of products depending on a given input.';
+        return 'Returns a list of products depending on given inputs and metrics.';
     }
 
     /**
@@ -26,17 +26,26 @@ class ListProducts implements Tool
         $name = $request['name'];
         $quantity = $request['quantity'];
         $price = $request['price'];
+        $quantityOperator = $request['quantityOperator'];
+        $priceOperator = $request['priceOperator'];
 
         return Product::query()
             ->when($name, function ($query, $name) {
-
-                return $query->where('name', 'like', "%{$name}%");
+                $query->where('name', 'like', "%{$name}%");
             })
-            ->when($quantity, function ($query, $quantity) {
-                return $query->where('quantity', $quantity);
+            ->when($quantity !== null, function ($query) use ($quantity, $quantityOperator) {
+                $query->where(
+                    'quantity',
+                    $quantityOperator ?? '=',
+                    $quantity
+                );
             })
-            ->when($price, function ($query, $price) {
-                return $query->where('price', $price);
+            ->when($price !== null, function ($query) use ($price, $priceOperator) {
+                $query->where(
+                    'price',
+                    $priceOperator ?? '=',
+                    $price
+                );
             })
             ->get()
             ->map(function (Product $product) {
@@ -46,7 +55,8 @@ class ListProducts implements Tool
                     'price' => $product->price,
                     'quantity' => $product->quantity,
                 ];
-            });
+            })
+            ->toJson();
     }
 
     /**
@@ -58,6 +68,8 @@ class ListProducts implements Tool
             'name' => $schema->string()->nullable(),
             'price' => $schema->number()->nullable(),
             'quantity' => $schema->integer()->nullable(),
+            'quantityOperator' => $schema->string()->enum(['>', '<', '>=', '<='])->nullable(),
+            'priceOperator' => $schema->string()->enum(['>', '<', '>=', '<='])->nullable(),
         ];
     }
 }
