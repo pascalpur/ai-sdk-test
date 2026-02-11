@@ -11,6 +11,8 @@ use Stringable;
 
 class CreateProduct implements Tool
 {
+    use Concerns\Confirmable;
+
     /**
      * Get the description of the tool's purpose.
      */
@@ -24,6 +26,10 @@ class CreateProduct implements Tool
      */
     public function handle(Request $request): Stringable|string
     {
+        if ($confirmation = $this->checkConfirmation($request)) {
+            return $confirmation;
+        }
+
         $name = $request['name'];
         $description = $request['description'];
         $price = $request['price'];

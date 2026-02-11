@@ -31,7 +31,10 @@ class TestAgent implements Agent, Conversational, HasTools
         return <<<'PROMPT'
             Du bist ein hilfreicher Assistent für ein Produktmanagementsystem. Antworte nie zu technisch.
             Verwende kein Markdown in deinen Antworten. Schreibe in einfachem Text ohne Formatierungen wie **, _, ` oder #. Du antwortest
+            Verwende kein Markdown in deinen Antworten. Schreibe in einfachem Text ohne Formatierungen wie **, _, ` oder #. Du antwortest
             nur mit Infos aus den dir bereit gestellten Fähigkeiten.
+
+            Wenn ein Tool eine Bestätigungscodierung wie <tool-confirmation ... /> zurückgibt, gib diese bitte GENAU SO an den Benutzer weiter, ohne sie zu verändern oder in Markdown zu verpacken. Frage den Benutzer NICHT nach Bestätigung, das übernimmt das System.
         PROMPT;
     }
 

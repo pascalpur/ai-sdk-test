@@ -43,7 +43,85 @@
                     <div class="flex {{ $message['role'] === 'user' ? 'justify-end' : 'justify-start' }}">
                         <div
                             class="max-w-[80%] rounded-2xl px-4 py-2 {{ $message['role'] === 'user' ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white' : 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200' }}">
-                            <p class="whitespace-pre-wrap text-sm">{{ $message['content'] }}</p>
+                            @php
+                                $confirmation = null;
+                                $resolved = null;
+
+                                if ($message['role'] === 'assistant') {
+                                    if (preg_match('/<tool-confirmation-resolved status="([^"]+)" hash="([^"]+)" tool="([^"]+)" params="([^"]+)" \/>/', $message['content'], $matches)) {
+                                        $resolved = [
+                                            'status' => $matches[1],
+                                            'hash' => $matches[2],
+                                            'tool' => $matches[3],
+                                            'params' => json_decode(htmlspecialchars_decode($matches[4]), true),
+                                        ];
+                                    } elseif (preg_match('/<tool-confirmation hash="([^"]+)" tool="([^"]+)" params="([^"]+)" \/>/', $message['content'], $matches)) {
+                                        $confirmation = [
+                                            'hash' => $matches[1],
+                                            'tool' => $matches[2],
+                                            'params' => json_decode(htmlspecialchars_decode($matches[3]), true),
+                                        ];
+                                    }
+                                }
+                            @endphp
+
+                            @if ($resolved)
+                                <div class="space-y-3 opacity-75">
+                                    <div class="flex items-center gap-2 border-b border-zinc-200/20 pb-2">
+                                        @if($resolved['status'] === 'confirmed')
+                                            <flux:icon.check-circle class="h-4 w-4 text-green-500" />
+                                            <span class="font-medium text-green-600 dark:text-green-400">Bestätigt</span>
+                                        @else
+                                            <flux:icon.x-circle class="h-4 w-4 text-red-500" />
+                                            <span class="font-medium text-red-600 dark:text-red-400">Abgebrochen</span>
+                                        @endif
+                                        <span class="text-xs text-zinc-500">Tool: {{ $resolved['tool'] }}</span>
+                                    </div>
+
+                                    <div class="rounded bg-black/5 p-2 font-mono text-xs text-zinc-500 dark:bg-white/5">
+                                        @foreach($resolved['params'] as $key => $value)
+                                            <div class="flex gap-2">
+                                                <span class="opacity-60">{{ $key }}:</span>
+                                                <span>{{ is_array($value) ? json_encode($value) : $value }}</span>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @elseif ($confirmation)
+                                <div class="space-y-3">
+                                    <div class="flex items-center gap-2 border-b border-zinc-200/20 pb-2">
+                                        <flux:icon.shield-check class="h-4 w-4 text-amber-500" />
+                                        <span class="font-medium">Bestätigung erforderlich</span>
+                                    </div>
+
+                                    <p class="text-xs opacity-80">
+                                        Soll das Tool <strong>{{ $confirmation['tool'] }}</strong> mit folgenden Werten ausgeführt
+                                        werden?
+                                    </p>
+
+                                    <div class="rounded bg-black/10 p-2 font-mono text-xs dark:bg-white/10">
+                                        @foreach($confirmation['params'] as $key => $value)
+                                            <div class="flex gap-2">
+                                                <span class="opacity-60">{{ $key }}:</span>
+                                                <span>{{ is_array($value) ? json_encode($value) : $value }}</span>
+                                            </div>
+                                        @endforeach
+                                    </div>
+
+                                    <div class="flex justify-end gap-2 pt-1">
+                                        <button wire:click="cancelTool('{{ $confirmation['hash'] }}')"
+                                            class="rounded border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20">
+                                            Abbrechen
+                                        </button>
+                                        <button wire:click="confirmTool('{{ $confirmation['hash'] }}')"
+                                            class="rounded bg-green-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-green-600 hover:shadow">
+                                            Bestätigen
+                                        </button>
+                                    </div>
+                                </div>
+                            @else
+                                <p class="whitespace-pre-wrap text-sm">{{ $message['content'] }}</p>
+                            @endif
                         </div>
                     </div>
                 @empty
@@ -58,18 +136,22 @@
                     </div>
                 @endforelse
 
-                {{-- Loading indicator --}}
+                {{-- Streaming Response --}}
                 @if ($isLoading)
                     <div class="flex justify-start">
-                        <div class="rounded-2xl bg-zinc-100 px-4 py-3 dark:bg-zinc-800">
-                            <div class="flex items-center gap-1">
-                                <div class="h-2 w-2 animate-bounce rounded-full bg-zinc-400" style="animation-delay: 0ms;">
+                        <div
+                            class="max-w-[80%] rounded-2xl px-4 py-2 bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
+                            <p class="whitespace-pre-wrap text-sm" wire:stream="streamingContent">{{ $streamingContent }}</p>
+                            @if (empty($streamingContent))
+                                <div class="flex items-center gap-1">
+                                    <div class="h-2 w-2 animate-bounce rounded-full bg-zinc-400" style="animation-delay: 0ms;">
+                                    </div>
+                                    <div class="h-2 w-2 animate-bounce rounded-full bg-zinc-400" style="animation-delay: 150ms;">
+                                    </div>
+                                    <div class="h-2 w-2 animate-bounce rounded-full bg-zinc-400" style="animation-delay: 300ms;">
+                                    </div>
                                 </div>
-                                <div class="h-2 w-2 animate-bounce rounded-full bg-zinc-400" style="animation-delay: 150ms;">
-                                </div>
-                                <div class="h-2 w-2 animate-bounce rounded-full bg-zinc-400" style="animation-delay: 300ms;">
-                                </div>
-                            </div>
+                            @endif
                         </div>
                     </div>
                 @endif

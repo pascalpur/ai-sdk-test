@@ -20,6 +20,8 @@ class AiChatWidget extends Component
 
     public bool $isLoading = false;
 
+    public string $streamingContent = '';
+
     public function mount(): void
     {
         $this->conversationId = session('chat_conversation_id');
@@ -72,7 +74,15 @@ class AiChatWidget extends Component
                 $agent->forUser(Auth::user());
             }
 
-            $response = $agent->prompt($message);
+            // Use streaming instead of prompt
+            $response = $agent->stream($message);
+
+            // Stream each text delta to the frontend
+            foreach ($response as $event) {
+                if ($event instanceof \Laravel\Ai\Streaming\Events\TextDelta) {
+                    $this->stream(to: 'streamingContent', content: $event->delta);
+                }
+            }
 
             // Store conversation ID for future messages
             if (!$this->conversationId) {
@@ -81,7 +91,7 @@ class AiChatWidget extends Component
             }
 
             // Parse response to replace pseudonyms with real values
-            $parsedResponse = resolve_pseudonyms((string) $response);
+            $parsedResponse = resolve_pseudonyms($response->text ?? '');
 
             // Add AI response to the list
             $this->messages[] = [
@@ -99,6 +109,7 @@ class AiChatWidget extends Component
         session(['chat_messages' => $this->messages]);
 
         $this->isLoading = false;
+        $this->streamingContent = '';
 
         $this->dispatch('chat-updated');
     }
@@ -109,6 +120,60 @@ class AiChatWidget extends Component
         $this->conversationId = null;
         $this->isLoading = false;
         session()->forget(['chat_conversation_id', 'chat_messages']);
+    }
+
+    public function confirmTool(string $hash): void
+    {
+        session()->put('tool_confirmed_' . $hash, true);
+
+        $this->updateMessageState($hash, 'confirmed');
+
+        $message = "Aktion bestätigt. Bitte fortfahren.";
+
+        // Add user message indicating confirmation
+        $this->messages[] = [
+            'role' => 'user',
+            'content' => $message,
+        ];
+
+        session(['chat_messages' => $this->messages]);
+        $this->dispatch('chat-updated');
+
+        // Trigger AI response with the confirmation message
+        $this->dispatch('fetch-ai-response', message: $message);
+    }
+
+    public function cancelTool(?string $hash = null): void
+    {
+        if ($hash) {
+            $this->updateMessageState($hash, 'cancelled');
+        }
+
+        $message = "Aktion abgebrochen. Bitte nicht fortfahren.";
+
+        $this->messages[] = [
+            'role' => 'user',
+            'content' => $message,
+        ];
+
+        session(['chat_messages' => $this->messages]);
+        $this->dispatch('chat-updated');
+
+        // Trigger AI response to acknowledge cancellation
+        $this->dispatch('fetch-ai-response', message: $message);
+    }
+
+    protected function updateMessageState(string $hash, string $status): void
+    {
+        foreach ($this->messages as $key => $message) {
+            if ($message['role'] === 'assistant' && str_contains($message['content'], 'hash="' . $hash . '"')) {
+                $this->messages[$key]['content'] = preg_replace(
+                    '/<tool-confirmation (.*?) \/>/',
+                    '<tool-confirmation-resolved status="' . $status . '" $1 />',
+                    $message['content']
+                );
+            }
+        }
     }
 
     public function render()
