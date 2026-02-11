@@ -1,71 +1,151 @@
 # Implementierung des Tool-Bestätigungssystems
 
-Dieses Dokument beschreibt die technische Umsetzung des Bestätigungssystems, das verhindert, dass der AI-Agent kritische Aktionen (wie das Erstellen von Produkten) ohne explizite Benutzerzustimmung ausführt.
+Dises Dokument beschreibt die implementierte Lösung für deterministische Tool-Bestätigungen mittels `laravel/ai` SDK.
+Statt Prompts zu nutzen, setzen wir auf strukturierte Events.
 
-## Funktionsweise
+## 1. Backend: Confirmable Trait
 
-Das System basiert auf einem **Session-basierten Freigabemechanismus** kombiniert mit **Frontend-Interception**.
+Dieser Trait wird in Tools verwendet, um die Bestätigung anzufordern. Er gibt ein strukturiertes JSON-Objekt zurück.
 
-1.  **Agent will Aktion ausführen**: Der Agent ruft ein Tool auf (z.B. `CreateProduct`).
-2.  **Tool prüft Freigabe**: Das Tool prüft, ob für diese spezifische Anfrage (Hash der Parameter) bereits eine Freigabe in der Session existiert.
-3.  **Abfang & Rückgabe**:
-    *   **Nicht freigegeben**: Das Tool bricht ab und gibt einen speziellen XML-Tag zurück: `<tool-confirmation ... />`.
-    *   **Freigegeben**: Das Tool führt die Aktion aus.
-4.  **Frontend-Anzeige**: Der Chat-Widget erkennt den XML-Tag und rendert statt des Textes eine UI mit "Bestätigen" / "Abbrechen" Buttons.
-5.  **Benutzer-Interaktion**:
-    *   **Bestätigen**: Ein Session-Key wird gesetzt und der Agent wird erneut getriggert. Er ruft das Tool mit denselben Parametern auf -> diesmal erfolgreich, da Session-Key existiert.
-    *   **Abbrechen**: Eine Abbruch-Nachricht wird gesendet.
-
-## Implementierte Komponenten
-
-### 1. `Confirmable` Trait
-**Pfad**: `app/Ai/Tools/Concerns/Confirmable.php`
-Dies ist das Herzstück. Tools können diesen Trait verwenden, um die Bestätigungslogik einzubinden.
+**Datei**: `app/Ai/Tools/Concerns/Confirmable.php`
 
 ```php
-trait Confirmable {
-    protected function checkConfirmation(Request $request): ?string {
-        // Erstellt eindeutigen Hash aus Tool-Klasse + Parametern
-        $hash = md5(static::class . serialize($request->all()));
-        
-        // Wenn in Session bestätigt -> Null zurückgeben (alles ok)
-        if (Session::has('tool_confirmed_' . $hash)) {
-            Session::forget($sessionKey); // Einmal-Token verbrauchen
-            return null;
+<?php
+
+namespace App\Ai\Tools\Concerns;
+
+use Illuminate\Support\Facades\Session;
+use Laravel\Ai\Tools\Request;
+
+trait Confirmable
+{
+    /**
+     * Check if the tool execution is confirmed.
+     */
+    protected function checkConfirmation(Request $request): ?string
+    {
+        $params = $request->all();
+        ksort($params);
+        $hash = md5(static::class . serialize($params));
+        $sessionKey = 'tool_confirmed_' . $hash;
+
+        if (Session::has($sessionKey)) {
+            // Clear the confirmation after use so it can't be replayed indefinitely
+            Session::forget($sessionKey);
+            return null; // Confirmed, proceed
         }
 
-        // Sonst: Strukturierte Anforderung zurückgeben
-        return sprintf('<tool-confirmation hash="%s" ... />', ...);
+        // Return a structured JSON string that the frontend can intercept via ToolResult event
+        return json_encode([
+            'confirmation_required' => true,
+            'hash' => $hash,
+            'tool' => class_basename($this),
+            'params' => $request->all(),
+            'instruction' => 'SYSTEM: STOP. User approval required.',
+        ]);
     }
 }
 ```
 
-### 2. Livewire Komponente (`AiChatWidget`)
-**Pfad**: `app/Livewire/AiChatWidget.php`
-Verwaltet die Interaktion im Frontend.
+## 2. Frontend Logic: AiChatWidget
 
-*   `confirmTool($hash)`: Setzt den Session-Key (`tool_confirmed_...`), aktualisiert die UI auf "Bestätigt" und triggert den Agent erneut.
-*   `cancelTool($hash)`: Aktualisiert die UI auf "Abgebrochen" und informiert den Agent.
-*   `updateMessageState(...)`: Hilfsmethode, die den XML-Tag im Chatverlauf von `<tool-confirmation>` zu `<tool-confirmation-resolved>` ändert, um den Status (Grüner Haken / Rotes X) anzuzeigen.
+Die Komponente fängt das `ToolResult` Event ab. Wenn `confirmation_required` enthalten ist, wird der Stream gestoppt und die Bestätigungs-UI gerendert.
 
-### 3. Blade Template
-**Pfad**: `resources/views/livewire/ai-chat-widget.blade.php`
-Enthält die Logik zum Parsen und Anzeigen der Tags.
+**Datei**: `app/Livewire/AiChatWidget.php` (relevanter Auszug)
 
-*   Parsen von `<tool-confirmation ... />`: Zeigt Buttons.
-*   Parsen von `<tool-confirmation-resolved ... />`: Zeigt Status (Bestätigt/Abgebrochen) ohne Buttons.
+```php
+    #[On('fetch-ai-response')]
+    public function fetchAiResponse(string $message): void
+    {
+        // ... (Agnet Setup) ...
 
-### 4. Agent Instruktion (`TestAgent`)
-**Pfad**: `app/Ai/Agents/TestAgent.php`
-Der Agent wurde angewiesen, die `<tool-confirmation>` Tags unverändert durchzureichen, damit das Frontend sie verarbeiten kann.
+        // Use streaming instead of prompt
+        $response = $agent->stream($message);
 
-## Erweiterbarkeit
+        $isConfirmation = false;
+        $confirmationTag = null;
+        $suppressStreaming = false;
 
-Um ein weiteres Tool (z.B. `DeleteProduct`) abzusichern, müssen Sie nur:
-1.  Den Trait einbinden: `use Concerns\Confirmable;`
-2.  Am Anfang der `handle`-Methode prüfen:
-    ```php
-    if ($confirmation = $this->checkConfirmation($request)) {
-        return $confirmation;
+        foreach ($response as $event) {
+            // Intercept ToolResult for deterministic confirmation
+            if ($event instanceof \Laravel\Ai\Streaming\Events\ToolResult) {
+                // ... (Check for confirmation) ...
+                if ($isConfirmation) {
+                     // ... Construct Tag ...
+                    $this->stream(to: 'streamingContent', content: $confirmationTag);
+                    
+                    // WICHTIG: Nicht abbrechen (kein break), sondern Stream weiterlaufen lassen,
+                    // damit das SDK die Conversation-History speichert!
+                    $suppressStreaming = true; 
+                }
+            }
+
+            if ($event instanceof \Laravel\Ai\Streaming\Events\TextDelta) {
+                if (!$suppressStreaming) {
+                    $this->stream(to: 'streamingContent', content: $event->delta);
+                }
+            }
+        }
+
+        // ...
+        
+        if ($isConfirmation && $confirmationTag) {
+            $parsedResponse = $confirmationTag;
+        } else {
+            $parsedResponse = resolve_pseudonyms($response->text ?? '');
+        }
+
+        $this->messages[] = [
+            'role' => 'assistant',
+            'content' => $parsedResponse,
+        ];
+        
+        // ...
     }
-    ```
+
+    public function confirmTool(string $hash): void
+    {
+        session()->put('tool_confirmed_' . $hash, true);
+        $this->updateMessageState($hash, 'confirmed');
+        // ... trigger AI again ...
+    }
+```
+
+## 3. Frontend View: Blade Template
+
+Das Template parst die speziellen Tags, um die Buttons oder den Status anzuzeigen.
+
+**Datei**: `resources/views/livewire/ai-chat-widget.blade.php` (Auszug)
+
+```blade
+@php
+    $confirmation = null;
+    $resolved = null;
+
+    if ($message['role'] === 'assistant') {
+        if (preg_match('/<tool-confirmation-resolved status="([^"]+)" ... \/>/', $message['content'], $matches)) {
+            $resolved = [ ... ];
+        } elseif (preg_match('/<tool-confirmation ... \/>/', $message['content'], $matches)) {
+            $confirmation = [ ... ];
+        }
+    }
+@endphp
+
+@if ($resolved)
+    <!-- Status Anzeige (Bestätigt/Abgebrochen) -->
+    <div class="space-y-3 opacity-75">
+        ...
+    </div>
+@elseif ($confirmation)
+    <!-- Konfirmations-Karte mit Buttons -->
+    <div class="space-y-3">
+        <p>Soll das Tool <strong>{{ $confirmation['tool'] }}</strong> ausgeführt werden?</p>
+        ...
+        <button wire:click="cancelTool('{{ $confirmation['hash'] }}')">Abbrechen</button>
+        <button wire:click="confirmTool('{{ $confirmation['hash'] }}')">Bestätigen</button>
+    </div>
+@else
+    <!-- Standard Nachricht -->
+    <p>{{ $message['content'] }}</p>
+@endif
+```

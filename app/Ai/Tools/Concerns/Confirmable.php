@@ -12,8 +12,12 @@ trait Confirmable
      */
     protected function checkConfirmation(Request $request): ?string
     {
-        $hash = md5(static::class . serialize($request->all()));
+        $params = $request->all();
+        ksort($params);
+        $hash = md5(static::class . serialize($params));
         $sessionKey = 'tool_confirmed_' . $hash;
+
+
 
         if (Session::has($sessionKey)) {
             // Clear the confirmation after use so it can't be replayed indefinitely
@@ -21,14 +25,13 @@ trait Confirmable
             return null; // Confirmed, proceed
         }
 
-        // Return a special structured string that the frontend can parse
-        // We include the hash so the frontend knows what to confirm
-        // We also include the tool name and params for display (optional)
-        return sprintf(
-            '<tool-confirmation hash="%s" tool="%s" params="%s" />',
-            $hash,
-            class_basename($this),
-            e(json_encode($request->all()))
-        );
+        // Return a structured JSON string that the frontend can intercept via ToolResult event
+        return json_encode([
+            'confirmation_required' => true,
+            'hash' => $hash,
+            'tool' => class_basename($this),
+            'params' => $request->all(),
+            'instruction' => 'SYSTEM: STOP. User approval required.',
+        ]);
     }
 }

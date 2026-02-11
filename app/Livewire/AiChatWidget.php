@@ -4,7 +4,6 @@ namespace App\Livewire;
 
 use App\Ai\Agents\TestAgent;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -77,10 +76,43 @@ class AiChatWidget extends Component
             // Use streaming instead of prompt
             $response = $agent->stream($message);
 
-            // Stream each text delta to the frontend
+            $buffer = '';
+            $isBuffering = true;
+            $isConfirmation = false;
+            $confirmationTag = null;
+            $suppressStreaming = false;
+
             foreach ($response as $event) {
+                // Intercept ToolResult for deterministic confirmation
+                if ($event instanceof \Laravel\Ai\Streaming\Events\ToolResult) {
+                    $result = $event->toolResult->result;
+
+                    // Attempt to decode JSON result
+                    if (str_starts_with($result, '{')) {
+                        $data = json_decode($result, true);
+                        if (json_last_error() === JSON_ERROR_NONE && ($data['confirmation_required'] ?? false)) {
+                            $isConfirmation = true;
+                            // We found the confirmation.
+                            // We suppress all further text streaming effectively for user output
+                            // And we manually inject the XML tag for the view to render.
+                            $confirmationTag = sprintf(
+                                '<tool-confirmation hash="%s" tool="%s" params="%s" />',
+                                $data['hash'],
+                                $data['tool'],
+                                e(json_encode($data['params']))
+                            );
+
+                            $this->stream(to: 'streamingContent', content: $confirmationTag);
+                            $suppressStreaming = true; // Stop showing output, but CONTINUE the loop to verify SDK saves history!
+                        }
+                    }
+                }
+
                 if ($event instanceof \Laravel\Ai\Streaming\Events\TextDelta) {
-                    $this->stream(to: 'streamingContent', content: $event->delta);
+                    if (!$suppressStreaming) {
+                        // Stream content normally
+                        $this->stream(to: 'streamingContent', content: $event->delta);
+                    }
                 }
             }
 
@@ -90,8 +122,13 @@ class AiChatWidget extends Component
                 session(['chat_conversation_id' => $this->conversationId]);
             }
 
-            // Parse response to replace pseudonyms with real values
-            $parsedResponse = resolve_pseudonyms($response->text ?? '');
+            if ($isConfirmation && $confirmationTag) {
+                // If confirmed, the message content is the tag itself (so it renders buttons on reload)
+                $parsedResponse = $confirmationTag;
+            } else {
+                // Parse response to replace pseudonyms with real values
+                $parsedResponse = resolve_pseudonyms($response->text ?? '');
+            }
 
             // Add AI response to the list
             $this->messages[] = [
@@ -128,7 +165,7 @@ class AiChatWidget extends Component
 
         $this->updateMessageState($hash, 'confirmed');
 
-        $message = "Aktion bestätigt. Bitte fortfahren.";
+        $message = 'Aktion bestätigt. Bitte fortfahren.';
 
         // Add user message indicating confirmation
         $this->messages[] = [
@@ -149,7 +186,7 @@ class AiChatWidget extends Component
             $this->updateMessageState($hash, 'cancelled');
         }
 
-        $message = "Aktion abgebrochen. Bitte nicht fortfahren.";
+        $message = 'Aktion abgebrochen. Bitte nicht fortfahren.';
 
         $this->messages[] = [
             'role' => 'user',
@@ -181,4 +218,3 @@ class AiChatWidget extends Component
         return view('livewire.ai-chat-widget');
     }
 }
-
